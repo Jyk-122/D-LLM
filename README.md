@@ -1,4 +1,4 @@
-# D-LLM
+# D-LLM(WIP)
 
 This repository is the official implementation of [D-LLM: A Token Adaptive Computing Resource Allocation Strategy for Large Language Models](https://arxiv.org/abs/2030.12345). 
 
