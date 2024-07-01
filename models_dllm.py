@@ -13,7 +13,7 @@ def LLaMA2_7B_Dynamic(args, **kwargs):
     checkpoint = torch.load(os.path.join(llama_model_path, "consolidated.00.pth"), map_location="cpu")
 
     with open(llama_param_path, "r") as f:
-        param = json.load(f)
+        params = json.load(f)
     
     model_args: ModelArgs = ModelArgs(
         max_seq_len=args.max_seq_len,

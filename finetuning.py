@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import time
+import math
 from pathlib import Path
 from typing import Iterable
 import numpy as np
@@ -184,9 +185,11 @@ def val_one_epoch(
                 f.write("Loss is {} when evaluating at example {}-{}.\n".format(c_loss_value, prompt, output))
             sys.exit(1)
 
+        lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(closs=c_loss_value)
         metric_logger.update(aloss=a_loss_value)
         metric_logger.update(act=active_ratio_value)
+        metric_logger.update(lr=lr)
 
         c_loss_value_reduce += misc.all_reduce_mean(c_loss_value)
         a_loss_value_reduce += misc.all_reduce_mean(a_loss_value)

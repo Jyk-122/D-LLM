@@ -7,7 +7,8 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-from torch import nn, Embedding, Linear
+from torch import nn
+from torch.nn import Embedding, Linear
 
 
 @dataclass
@@ -297,8 +298,8 @@ class Attention(nn.Module):
         self.head_dim = args.dim // args.n_heads
 
         self.wq = Linear(args.dim, args.n_heads * self.head_dim, bias=False)
-        self.wk = Linear(args.dim, args.n_kv_heads * self.head_dim, bias=False)
-        self.wv = Linear(args.dim, args.n_kv_heads * self.head_dim, bias=False)
+        self.wk = Linear(args.dim, self.n_kv_heads * self.head_dim, bias=False)
+        self.wv = Linear(args.dim, self.n_kv_heads * self.head_dim, bias=False)
         self.wo = Linear(args.n_heads * self.head_dim, args.dim, bias=False)
 
         self.lora_q = LoRAModule(in_dim=args.dim, rank=args.lora_rank, out_dim=self.head_dim * self.n_local_heads)
