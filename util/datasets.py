@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import Dataset
 
 sys.path.append("../")
-from llama import tokenizer
+from llama import Tokenizer
 
 
 def load_alpaca(dataset_path, prompt_dict, max_words, tokenizer):
@@ -22,19 +22,19 @@ def load_alpaca(dataset_path, prompt_dict, max_words, tokenizer):
     with open(dataset_path, 'r') as f:
         datas = json.load(f)
     
-    for data in datas:
+    for data in tqdm(datas):
         if data["input"] == "":
             prompt = prompt_dict["prompt_wo_input"].format_map(data)
         else:
             prompt = prompt_dict["prompt_with_input"].format_map(data)
         
-        example = prompt + data["input"]
+        example = prompt + data["output"]
 
         example, label, example_mask, label_mask = tokenize(example, prompt, max_words, tokenizer)
 
         examples.append(example)
         labels.append(label)
-        example_masks.append(example_masks)
+        example_masks.append(example_mask)
         label_masks.append(label_mask)
         prompts.append(prompt)
         outputs.append(data["output"])
@@ -84,11 +84,12 @@ class InstructionDataset(Dataset):
         else:
             raise ValueError(f"Invalid partiton type: {partition}")
         
-        prompt_dict = json.load(os.path.join(dataset_path, "prompt.json"))
+        with open(os.path.join(dataset_path, "prompt.json"), "r") as f:
+            prompt_dict = json.load(f)
 
         self.max_words = max_words
         self.truncation_type = truncation_type
-        self.tokenizer = Tokenizer(model=tokenizer_path)
+        self.tokenizer = Tokenizer(model_path=tokenizer_path)
 
         print(f"Loading dataset >>> {dataset_name} >>> ......")
         datas = handler(data_path, prompt_dict, max_words, self.tokenizer)

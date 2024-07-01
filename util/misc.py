@@ -298,7 +298,7 @@ def save_model(args, epoch, model, model_without_ddp, optimizer, loss_scaler):
     for checkpoint_path in checkpoint_paths:
         to_save = {
             'epoch': epoch,
-            'model': model_without_ddp.state_dict(),
+            'model': model_save_state_dict,
             'optimizer': optimizer_state_dict,
             'scaler': scaler_state_dict,
         }
@@ -319,7 +319,7 @@ def load_model(args, model_without_ddp, optimizer, loss_scaler):
         if checkpoint['optimizer'] is not None:
             optimizer.load_state_dict(checkpoint['optimizer'])
         if checkpoint['scaler'] is not None:
-            optimizer.load_state_dict(checkpoint['scaler'])
+            scaler.load_state_dict(checkpoint['scaler'])
 
         print("Resume checkpoint %s." % args.resume)
 

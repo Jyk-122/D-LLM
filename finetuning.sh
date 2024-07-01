@@ -8,6 +8,7 @@ OUTPUT_PATH=./output
 torchrun --nproc_per_node 8 --master_port 9900 finetuning.py \
     --model_save_name Llama-7B-dynamic \
     --llama_model_path $MODEL_PATH/models \
+    --tokenizer_path $MODEL_PATH/../tokenizer.model \
     --dataset_path $DATASET_PATH \
     --dataset_name alpaca \
     --max_seq_len 1024 \

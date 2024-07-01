@@ -5,15 +5,9 @@ import math
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-import fairscale.nn.model_parallel.initialize as fs_init
 import torch
 import torch.nn.functional as F
-from fairscale.nn.model_parallel.layers import (
-    ColumnParallelLinear,
-    ParallelEmbedding,
-    RowParallelLinear,
-)
-from torch import nn
+from torch import nn, Embedding, Linear
 
 
 @dataclass
@@ -188,7 +182,7 @@ class ActiveLoss(nn.Module):
     @torch.no_grad()
     def metric(self, activation: torch.Tensor, mask: torch.Tensor):
         activation = activation[:, self.reserve_initials:, :]
-        mask = activation[:, self.reserve_initials:]
+        mask = mask[:, self.reserve_initials:]
 
         metrics = {}
 
@@ -200,14 +194,14 @@ class ActiveLoss(nn.Module):
         metrics.update(mean_scalar_ratio=mean_scalar_ratio)
         metrics.update(mean_batch_ratio=mean_batch_ratio)
         metrics.update(max_scalar_ratio=max_scalar_ratio)
-        metircs.update(min_scalar_ratio=min_scalar_ratio)
+        metrics.update(min_scalar_ratio=min_scalar_ratio)
 
         return metrics
 
 
     def forward(self, activation: torch.Tensor, mask: torch.Tensor):
         activation = activation[:, self.reserve_initials:, :]
-        mask = activation[:, self.reserve_initials:]
+        mask = mask[:, self.reserve_initials:]
 
         activation = activation.mean(dim=-1)
         target = torch.ones_like(activation) * self.target
@@ -219,13 +213,13 @@ class ActiveLoss(nn.Module):
 
 
 class LoRAModule(nn.Module):
-    def __init__(self, dim: int, rank: int):
+    def __init__(self, in_dim : int, rank : int, out_dim : int):
         super().__init__()
-        self.linear_A = nn.Linear(dim, rank, bias=False)
-        self.linear_B = nn.Linear(rank, dim, bias=False)
+        self.linear_A = nn.Linear(in_dim, rank, bias=False)
+        self.linear_B = nn.Linear(rank, out_dim, bias=False)
         self.dropout = nn.Dropout(0.05)
 
-        nn.init.normal_(self.linear_A.weight, 1 / rank)
+        nn.init.normal_(self.linear_A.weight, std=1 / rank)
         nn.init.zeros_(self.linear_B.weight)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -257,14 +251,14 @@ class RouterModule(nn.Module):
         x = self.linear_2(F.silu(self.norm(self.linear_1(x.float()))))
         
         if self.training:
-            x = F.gumbel_softmax(x, dim=-1, tau=-1, hard=True)
+            x = F.gumbel_softmax(x, dim=-1, tau=1, hard=True)
         else:
             x = F.softmax(x, dim=-1)
             x = torch.where(x < 0.5, 0, 1)
 
         x = x.half()
         
-        x[:, :self.reserve_initials, :] = torch.Tenosr([0, 1]).type_as(x)
+        x[:, :self.reserve_initials, :] = torch.Tensor([0, 1]).type_as(x)
         m = torch.zeros(2, seqlen).type_as(x)
         m[1, :] = 1
         eviction_mask = torch.matmul(x, m).transpose(2, 1)
@@ -297,49 +291,19 @@ class Attention(nn.Module):
         """
         super().__init__()
         self.n_kv_heads = args.n_heads if args.n_kv_heads is None else args.n_kv_heads
-        model_parallel_size = fs_init.get_model_parallel_world_size()
-        self.n_local_heads = args.n_heads // model_parallel_size
-        self.n_local_kv_heads = self.n_kv_heads // model_parallel_size
+        self.n_local_heads = args.n_heads
+        self.n_local_kv_heads = self.n_kv_heads
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
         self.head_dim = args.dim // args.n_heads
 
-        self.wq = ColumnParallelLinear(
-            args.dim,
-            args.n_heads * self.head_dim,
-            bias=False,
-            gather_output=False,
-            init_method=lambda x: x,
-        )
-        self.wk = ColumnParallelLinear(
-            args.dim,
-            self.n_kv_heads * self.head_dim,
-            bias=False,
-            gather_output=False,
-            init_method=lambda x: x,
-        )
-        self.wv = ColumnParallelLinear(
-            args.dim,
-            self.n_kv_heads * self.head_dim,
-            bias=False,
-            gather_output=False,
-            init_method=lambda x: x,
-        )
-        self.wo = RowParallelLinear(
-            args.n_heads * self.head_dim,
-            args.dim,
-            bias=False,
-            input_is_parallel=True,
-            init_method=lambda x: x,
-        )
+        self.wq = Linear(args.dim, args.n_heads * self.head_dim, bias=False)
+        self.wk = Linear(args.dim, args.n_kv_heads * self.head_dim, bias=False)
+        self.wv = Linear(args.dim, args.n_kv_heads * self.head_dim, bias=False)
+        self.wo = Linear(args.n_heads * self.head_dim, args.dim, bias=False)
 
-        # self.wq = Linear(args.dim, args.n_heads * self.head_dim, bias=False)
-        # self.wk = Linear(args.dim, args.n_heads * self.head_dim, bias=False)
-        # self.wv = Linear(args.dim, args.n_heads * self.head_dim, bias=False)
-        # self.wo = Linear(args.n_heads * self.head_dim, args.dim, bias=False)
-
-        self.lora_q = LoRAModule(dim=args.dim, rank=args.lora_rank)
-        self.lora_k = LoRAModule(dim=args.dim, rank=args.lora_rank)
-        self.lora_v = LoRAModule(dim=args.dim, rank=args.lora_rank)
+        self.lora_q = LoRAModule(in_dim=args.dim, rank=args.lora_rank, out_dim=self.head_dim * self.n_local_heads)
+        self.lora_k = LoRAModule(in_dim=args.dim, rank=args.lora_rank, out_dim=self.head_dim * self.n_local_kv_heads)
+        self.lora_v = LoRAModule(in_dim=args.dim, rank=args.lora_rank, out_dim=self.head_dim * self.n_local_kv_heads)
         
     def forward(
         self,
@@ -390,8 +354,8 @@ class Attention(nn.Module):
         scores = F.softmax(scores.float(), dim=-1)
 
         if eviction_mask is not None:
-            scores *= eviction_mask
-            scores /= (scores.sum(-1, keepdim=True) + 1e-6)
+            scores = scores * eviction_mask
+            scores = scores / (scores.sum(-1, keepdim=True) + 1e-6)
         scores = scores.type_as(xq)
 
         output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen, head_dim)
@@ -428,16 +392,6 @@ class FeedForward(nn.Module):
         if ffn_dim_multiplier is not None:
             hidden_dim = int(ffn_dim_multiplier * hidden_dim)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
-
-        # self.w1 = ColumnParallelLinear(
-        #     dim, hidden_dim, bias=False, gather_output=False, init_method=lambda x: x
-        # )
-        # self.w2 = RowParallelLinear(
-        #     hidden_dim, dim, bias=False, input_is_parallel=True, init_method=lambda x: x
-        # )
-        # self.w3 = ColumnParallelLinear(
-        #     dim, hidden_dim, bias=False, gather_output=False, init_method=lambda x: x
-        # )
 
         self.w1 = Linear(dim, hidden_dim, bias=False)
         self.w2 = Linear(hidden_dim, dim, bias=False)
@@ -482,8 +436,9 @@ class TransformerBlock(nn.Module):
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
-        if self.layer_id >= args.dynamic_start_layer:
-            self.router = RouterModule(args.dim, args.router_hdim, args.reserve_initials, args.norm_eps)
+        self.dynamic_start_layer = args.dynamic_start_layer
+        if self.layer_id >= self.dynamic_start_layer:
+            self.router = RouterModule(args.dim, args.dynamic_router_hdim, args.dynamic_reserve_initials, args.norm_eps)
 
     def forward(
         self,
@@ -509,6 +464,7 @@ class TransformerBlock(nn.Module):
 
         if self.layer_id < self.dynamic_start_layer:
             w = torch.ones((bsz, seqlen, 1)).type_as(x)
+
             h = x + self.attention(self.attention_norm(x), start_pos, freqs_cis, mask, None)
             out = h + self.feed_forward(self.ffn_norm(h))
             
@@ -547,10 +503,6 @@ class Transformer(nn.Module):
         self.vocab_size = params.vocab_size
         self.n_layers = params.n_layers
         
-
-        # self.tok_embeddings = ParallelEmbedding(
-        #     params.vocab_size, params.dim, init_method=lambda x: x
-        # )
         self.tok_embeddings = Embedding(params.vocab_size, params.dim)
 
         self.criterion = torch.nn.CrossEntropyLoss(ignore_index=0)
@@ -564,9 +516,7 @@ class Transformer(nn.Module):
             self.layers.append(TransformerBlock(layer_id, params))
 
         self.norm = RMSNorm(params.dim, eps=params.norm_eps)
-        # self.output = ColumnParallelLinear(
-        #     params.dim, params.vocab_size, bias=False, init_method=lambda x: x
-        # )
+
         self.output = Linear(params.dim, params.vocab_size, bias=False)
 
         self.freqs_cis = precompute_freqs_cis(
@@ -575,13 +525,12 @@ class Transformer(nn.Module):
             self.params.dim // self.params.n_heads, self.params.max_seq_len * 2
         )
 
-    @torch.inference_mode()
     def forward(
         self,
         examples: torch.Tensor,
         labels: torch.Tensor,
-        examples_mask: torch.Tensor,
-        labels_mask: torch.Tensor
+        example_masks: torch.Tensor,
+        label_masks: torch.Tensor
     ):
         """
         Perform a forward pass through the Transformer model.
@@ -596,8 +545,9 @@ class Transformer(nn.Module):
             torch.Tensor: Output logits after applying the Transformer model.
 
         """
-        _bsz, seqlen = tokens.shape
-        h = self.tok_embeddings(tokens)
+        _bsz, seqlen = examples.shape
+
+        h = self.tok_embeddings(examples)
         self.freqs_cis = self.freqs_cis.to(h.device)
         freqs_cis = self.freqs_cis[:seqlen]
 
@@ -618,7 +568,7 @@ class Transformer(nn.Module):
         labels = labels[:, 1:].flatten()
 
         c_loss = self.criterion(output, labels)
-        a_loss = self.criterion_active(activation[:, :-1, :], examples_mask[:, 1:])
-        active_metric = self.criterion_active.metric(activation[:, :-1, :], examples_mask[:, 1:])
+        a_loss = self.criterion_active(activation[:, :-1, :], example_masks[:, 1:])
+        active_metric = self.criterion_active.metric(activation[:, :-1, :], example_masks[:, 1:])
         
         return c_loss, a_loss, active_metric

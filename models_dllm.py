@@ -8,9 +8,11 @@ from llama.model_train import ModelArgs, Transformer
 
 def LLaMA2_7B_Dynamic(args, **kwargs):
     llama_model_path = args.llama_model_path
+    llama_param_path = args.llama_param_path
+
     checkpoint = torch.load(os.path.join(llama_model_path, "consolidated.00.pth"), map_location="cpu")
 
-    with open(os.path.join(llama_model_path, "param.json"), "r") as f:
+    with open(llama_param_path, "r") as f:
         param = json.load(f)
     
     model_args: ModelArgs = ModelArgs(
@@ -23,7 +25,7 @@ def LLaMA2_7B_Dynamic(args, **kwargs):
         dynamic_reserve_initials=args.dynamic_reserve_initials,
         **params
     )
-    tokenizer = Tokenizer(model_path=os.path.join(llama_model_path, "/tokenizer.model"))
+    tokenizer = Tokenizer(model_path=args.tokenizer_path)
 
     model_args.vocab_size = tokenizer.n_words
     torch.set_default_tensor_type(torch.cuda.HalfTensor)

@@ -331,7 +331,7 @@ class Llama:
         return [
             {
                 "generation": self.tokenizer.decode(generation_tokens[i]),
-                "tokens" [self.tokenizer.decode(x) for x in generation_tokens[i]],
+                "tokens": [self.tokenizer.decode(x) for x in generation_tokens[i]],
                 "logprobs": generation_logprobs[i] if logprobs else None,
                 "logacts": generation_logacts[i] if logacts else None
             }

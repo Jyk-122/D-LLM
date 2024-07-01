@@ -1,5 +1,6 @@
 import math
 import sys
+import numpy as np
 
 
 def cos_anneal(e0, e1, t0, t1, e):
@@ -35,6 +36,6 @@ def adjust_learning_rate(optimizer, epoch, args):
 
 def adjust_lambda_active(epoch, args):
     t0 = 0
-    t1 = args.adjust_lambda_active
+    t1 = args.lambda_active
     t = sin_anneal(0, args.epochs, t0, t1, epoch)
     return t

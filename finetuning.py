@@ -18,7 +18,6 @@ from util.datasets import InstructionDataset
 import util.lr_sched as lr_sched
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
-from llama import Tokenizer
 
 
 def get_args_parser():
@@ -32,6 +31,7 @@ def get_args_parser():
 
     # Model parameters
     parser.add_argument("--llama_model_path", default="./llama", type=str, help="path of llama model")
+    parser.add_argument("--tokenizer_path", default="./tokenizer.model", type=str, help="path of tokenizer model")
     parser.add_argument("--model_save_name", type=str, default="Llama_dynamic", help="")
     
     parser.add_argument("--max_seq_len", type=int, default=512, metavar="LENGTH", help="the maximum sequence length")
@@ -40,6 +40,7 @@ def get_args_parser():
     parser.add_argument("--dynamic_router_hdim", type=int, default=512, help="")
     parser.add_argument("--dynamic_start_layer", type=int, default=8, help="")
     parser.add_argument("--dynamic_reserve_initials", type=int, default=2, help="")
+    parser.add_argument("--lambda_active", type=float, default=1.0, help="")
 
     # Optimizer parameters
     parser.add_argument("--weight_decay", type=float, default=0.05, help="weight decay (default: 0.05)")
@@ -97,12 +98,12 @@ def train_one_epoch(
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
             lambda_active = lr_sched.adjust_lambda_active(data_iter_step / len(data_loader) + epoch, args)
 
-        c_loss, a_loss, activate_metric = model(example, label, example_mask, label_mask)
+        c_loss, a_loss, active_metric = model(example, label, example_mask, label_mask)
         loss = c_loss + lambda_active * a_loss
         loss_value = loss.item()
         c_loss_value = c_loss.item()
         a_loss_value = a_loss.item()
-        active_ratio_value = activate_metric["mean_scalar_ratio"].item()
+        active_ratio_value = active_metric["mean_scalar_ratio"].item()
 
         if not math.isfinite(loss_value):
             with open(os.path.join(args.log_dir, "log.txt"), mode="a", encoding="utf-8") as f:
@@ -172,16 +173,15 @@ def val_one_epoch(
         cnt += 1
 
         with torch.no_grad():
-            c_loss, a_loss, activate_metric = model(example, label, example_mask, label_mask)
-        loss = c_loss + lambda_active * a_loss
-        loss_value = loss.item()
+            c_loss, a_loss, active_metric = model(example, label, example_mask, label_mask)
+
         c_loss_value = c_loss.item()
         a_loss_value = a_loss.item()
-        active_ratio_value = activate_metric["mean_scalar_ratio"].item()
+        active_ratio_value = active_metric["mean_scalar_ratio"].item()
 
-        if not math.isfinite(loss_value):
+        if not math.isfinite(c_loss_value):
             with open(os.path.join(args.log_dir, "log.txt"), mode="a", encoding="utf-8") as f:
-                f.write("Loss is {} when evaluating at example {}-{}.\n".format(loss_value, prompt, output))
+                f.write("Loss is {} when evaluating at example {}-{}.\n".format(c_loss_value, prompt, output))
             sys.exit(1)
 
         metric_logger.update(closs=c_loss_value)
@@ -288,7 +288,7 @@ def main(args):
     if global_rank == 0:
         if args.output_dir:
             with open(os.path.join(args.output_dir, "model_args.json"), "w") as f:
-                json.dump(var(model.params), f, indent=4)
+                json.dump(vars(model.params), f, indent=4)
 
     model.to(device)
 
@@ -333,7 +333,7 @@ def main(args):
             model, data_loader_val, optimizer, device, epoch, loss_scaler, log_writer=log_writer, args=args
         )
 
-        if args.output_dir and ((epoch + 1) % (args.save_freq) == 0 or epoch + 1 == args.epochs):
+        if args.ckpt_dir and ((epoch + 1) % (args.save_freq) == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args,
                 model=model,
@@ -349,10 +349,10 @@ def main(args):
             **{f"val_{k}": v for k, v in val_stats.items()},
         }
 
-        if args.output_dir and misc.is_main_process():
+        if args.ckpt_dir and misc.is_main_process():
             if log_writer is not None:
                 log_writer.flush()
-            with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
+            with open(os.path.join(args.log_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
 
     total_time = time.time() - start_time
