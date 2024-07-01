@@ -263,6 +263,7 @@ class RouterModule(nn.Module):
         m = torch.zeros(2, seqlen).type_as(x)
         m[1, :] = 1
         eviction_mask = torch.matmul(x, m).transpose(2, 1)
+        eviction_mask = eviction_mask.unsqueeze(1)
 
         return x, eviction_mask
         
