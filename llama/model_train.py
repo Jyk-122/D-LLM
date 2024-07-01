@@ -225,7 +225,7 @@ class LoRAModule(nn.Module):
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.linear_B(self.linear_A(x.float()))
-        return self.dropout(x).half()
+        return self.dropout(x).bfloat16()
 
 
 class RouterModule(nn.Module):
@@ -257,7 +257,7 @@ class RouterModule(nn.Module):
             x = F.softmax(x, dim=-1)
             x = torch.where(x < 0.5, 0, 1)
 
-        x = x.half()
+        x = x.bfloat16()
         
         x[:, :self.reserve_initials, :] = torch.Tensor([0, 1]).type_as(x)
         m = torch.zeros(2, seqlen).type_as(x)

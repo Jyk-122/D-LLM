@@ -2,12 +2,14 @@
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
 MODEL_PATH=./models
+MODEL_PARAM_PATH=./models/params.json
 DATASET_PATH=./datasets
 OUTPUT_PATH=./output
 
 torchrun --nproc_per_node 8 --master_port 9900 finetuning.py \
     --model_save_name Llama-7B-dynamic \
-    --llama_model_path $MODEL_PATH/models \
+    --llama_model_path $MODEL_PATH \
+    --llama_param_path $MODEL_PARAM_PATH \
     --tokenizer_path $MODEL_PATH/../tokenizer.model \
     --dataset_path $DATASET_PATH \
     --dataset_name alpaca \

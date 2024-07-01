@@ -3,6 +3,7 @@ import copy
 import datetime
 import json
 import os
+import sys
 import time
 import math
 from pathlib import Path
@@ -32,6 +33,7 @@ def get_args_parser():
 
     # Model parameters
     parser.add_argument("--llama_model_path", default="./llama", type=str, help="path of llama model")
+    parser.add_argument("--llama_param_path", default="./llama", type=str, help="path of llama model")
     parser.add_argument("--tokenizer_path", default="./tokenizer.model", type=str, help="path of tokenizer model")
     parser.add_argument("--model_save_name", type=str, default="Llama_dynamic", help="")
     

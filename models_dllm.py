@@ -28,7 +28,8 @@ def LLaMA2_7B_Dynamic(args, **kwargs):
     tokenizer = Tokenizer(model_path=args.tokenizer_path)
 
     model_args.vocab_size = tokenizer.n_words
-    torch.set_default_tensor_type(torch.cuda.HalfTensor)
+    # torch.set_default_tensor_type(torch.cuda.HalfTensor)
+    torch.set_default_tensor_type(torch.cuda.BFloat16Tensor)
     model_llama_dynamic = Transformer(model_args)
     torch.set_default_tensor_type(torch.FloatTensor)
     model_llama_dynamic.load_state_dict(checkpoint, strict=False)
