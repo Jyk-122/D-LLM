@@ -2,6 +2,8 @@
 
 This repository is the official implementation of [D-LLM: A Token Adaptive Computing Resource Allocation Strategy for Large Language Models](https://arxiv.org/abs/2030.12345). 
 
+The implementation of algorithm is conducted on LLM [Llama-2](https://github.com/Meta-Llama/llama?tab=readme-ov-file) currently.
+
 >📋  Optional: include a graphic explaining your approach/main result, bibtex entry, link to demos, blog posts and tutorials
 
 ## Requirements
@@ -12,24 +14,42 @@ To install requirements:
 pip install -r requirements.txt
 ```
 
->📋  Describe how to set up the environment, e.g. pip/conda/docker commands, download datasets, etc...
+## Datasets
+Datasets used in our work are all public and available on [Huggingface](https://huggingface.co/datasets). We recommend the following form to organize datasets:
+```datasets_form
+└─datasets
+    ├─dataset_name_1
+    |   ├─train.json
+    |   ├─test.json
+    |   └─prompt.json
+    └─dataset_name_2
+        ├─train.json
+        ├─test.json
+        └─prompt.json
+```
+Here we provide two instruction datasets as templates for reference: Alpaca and PIQA. 
+
 
 ## Training
 
-To train the model(s) in the paper, run this command:
+To train the model(s) in the paper, you should appropriate parameters in `finetuning.sh` including:
+
+> - Path to where you place your LLMs' weights - `MODEL_PATH` and params - `MODEL_PARAM_PATH`
+> - Path to where you place your datasets - `DATASET_PATH`
+> - Main hyperparameters for model and training.
+
+And then, run this command:
 
 ```train
-python train.py --input-data <path_to_data> --alpha 10 --beta 20
+bash finetuning.sh
 ```
 
->📋  Describe how to train the models, with example commands on how to train the models in your paper, including the full training procedure and appropriate hyperparameters.
+## Inference
 
-## Evaluation
+To inference based on trained D-LLMs, run:
 
-To evaluate my model on ImageNet, run:
-
-```eval
-python eval.py --model-file mymodel.pth --benchmark imagenet
+```inference
+bash inference.sh
 ```
 
 >📋  Describe how to evaluate the trained models on benchmarks reported in the paper, give commands that produce the results (section below).
@@ -45,8 +65,6 @@ You can download pretrained models here:
 ## Results
 
 Our model achieves the following performance on :
-
-### [Image Classification on ImageNet](https://paperswithcode.com/sota/image-classification-on-imagenet)
 
 | Model name         | Top 1 Accuracy  | Top 5 Accuracy |
 | ------------------ |---------------- | -------------- |
