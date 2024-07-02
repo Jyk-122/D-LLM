@@ -54,7 +54,7 @@ def main(
     max_batch_size: int = 32,
     instructs: List[str] = instructs_examples,
 ):
-    generator = Llama.build_and_merge(
+    generator = Llama.build(
         llama_ckpt_dir=llama_ckpt_dir,
         dynamic_ckpt_dir=dynamic_ckpt_dir,
         model_args_path=model_args_path,
