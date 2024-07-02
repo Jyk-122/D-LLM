@@ -16,6 +16,7 @@ from fairscale.nn.model_parallel.initialize import (
     model_parallel_is_initialized,
 )
 
+sys.path.append("../")
 from llama.model import ModelArgs, Transformer
 from llama.tokenizer import Tokenizer
 
@@ -126,7 +127,7 @@ class Llama:
         )
         tokenizer = Tokenizer(model_path=tokenizer_path)
         model_args.vocab_size = tokenizer.n_words
-        torch.set_default_tensor_type(torch.cuda.HalfTensor)
+        torch.set_default_tensor_type(torch.cuda.BFloat16Tensor)
         model = Transformer(model_args)
         model.load_state_dict(llama_checkpoint, strict=False)
 
