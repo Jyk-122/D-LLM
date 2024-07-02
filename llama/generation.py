@@ -120,11 +120,10 @@ class Llama:
         with open(model_args_path, "r") as f:
             params = json.loads(f.read())
 
-        model_args: ModelArgs = ModelArgs(
-            max_seq_len=max_seq_len,
-            max_batch_size=max_batch_size,
-            **params,
-        )
+        model_args: ModelArgs = ModelArgs(**params)
+        model_args.max_batch_size = max_batch_size
+        model_args.max_seq_len = max_seq_len
+
         tokenizer = Tokenizer(model_path=tokenizer_path)
         model_args.vocab_size = tokenizer.n_words
         torch.set_default_tensor_type(torch.cuda.BFloat16Tensor)
@@ -141,7 +140,7 @@ class Llama:
         model.load_state_dict(state, strict=False)
 
         # Merge LoRA weights into Transformer.
-        for i in range(params.n_layers):
+        for i in range(params["n_layers"]):
             loraq_weight = state[f"layers.{i}.attention.lora_q.linear_A.weight"].T @ state[f"layers.{i}.attention.lora_q.linear_B.weight"].T
             lorak_weight = state[f"layers.{i}.attention.lora_k.linear_A.weight"].T @ state[f"layers.{i}.attention.lora_k.linear_B.weight"].T
             lorav_weight = state[f"layers.{i}.attention.lora_v.linear_A.weight"].T @ state[f"layers.{i}.attention.lora_v.linear_B.weight"].T
@@ -219,7 +218,7 @@ class Llama:
                 reduction="none",
                 ignore_index=pad_id,
             )
-            token_logacts = activation
+            token_logacts = activation.mean(dim=-1)
 
         for cur_pos in range(min_prompt_len, total_len):
             logits, activation = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
@@ -243,7 +242,7 @@ class Llama:
                     ignore_index=pad_id,
                 )
             if logacts:
-                token_logacts[: prev_pos : cur_pos] = activation
+                token_logacts[:, prev_pos : cur_pos] = activation.mean(dim=-1)
             eos_reached |= (~input_text_mask[:, cur_pos]) & (
                 next_token == self.tokenizer.eos_id
             )
@@ -318,16 +317,6 @@ class Llama:
             logacts=logacts,
             echo=echo,
         )
-        # if logprobs:
-        #     return [
-        #         {
-        #             "generation": self.tokenizer.decode(t),
-        #             "tokens": [self.tokenizer.decode(x) for x in t],
-        #             "logprobs": logprobs_i,
-        #         }
-        #         for t, logprobs_i in zip(generation_tokens, generation_logprobs)
-        #     ]
-        # return [{"generation": self.tokenizer.decode(t)} for t in generation_tokens]
 
         return [
             {
@@ -428,22 +417,7 @@ class Llama:
             logprobs=logprobs,
             logacts=logacts,
         )
-        # if logprobs:
-        #     return [
-        #         {
-        #             "generation": {
-        #                 "role": "assistant",
-        #                 "content": self.tokenizer.decode(t)
-        #                 if not unsafe
-        #                 else UNSAFE_ERROR,
-        #             },
-        #             "tokens": [self.tokenizer.decode(x) for x in t],
-        #             "logprobs": logprobs_i,
-        #         }
-        #         for t, logprobs_i, unsafe in zip(
-        #             generation_tokens, generation_logprobs, unsafe_requests
-        #         )
-        #     ]
+
         return [
             {
                 "generation": {

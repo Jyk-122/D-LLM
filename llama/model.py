@@ -3,7 +3,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import fairscale.nn.model_parallel.initialize as fs_init
 import torch
@@ -196,7 +196,7 @@ class RouterModule(nn.Module):
         x = F.softmax(x, dim=-1)
         x = torch.where(x < 0.5, 0, 1)
 
-        return x.half()
+        return x.bfloat16()
 
 
 class Attention(nn.Module):
@@ -279,8 +279,6 @@ class Attention(nn.Module):
             (
                 args.max_batch_size,
                 args.max_seq_len,
-                1,
-                1,
             )
         ).cuda()
 
@@ -288,6 +286,7 @@ class Attention(nn.Module):
         self,
         x: torch.Tensor,
         router: torch.Tensor,
+        batch_exec: List[int],
         start_pos: int,
         freqs_cis: torch.Tensor,
         mask: Optional[torch.Tensor],
@@ -318,13 +317,13 @@ class Attention(nn.Module):
         self.cache_v = self.cache_v.to(xq)
         self.cache_mask = self.cache_mask.to(xq)
 
-        self.cache_k[:bsz, start_pos : start_pos + seqlen] = xk
-        self.cache_v[:bsz, start_pos : start_pos + seqlen] = xv
-        self.cache_mask[:bsz, start_pos : start_pos + seqlen] = router[:, :, 0]
+        self.cache_k[batch_exec, start_pos : start_pos + seqlen] = xk
+        self.cache_v[batch_exec, start_pos : start_pos + seqlen] = xv
+        self.cache_mask[batch_exec, start_pos : start_pos + seqlen] = router[:, :, 0]
 
-        keys = self.cache_k[:bsz, : start_pos + seqlen]
-        values = self.cache_v[:bsz, : start_pos + seqlen]
-        cache_mask = self.cache_mask[:bsz, : start_pos + seqlen]
+        keys = self.cache_k[batch_exec, : start_pos + seqlen]
+        values = self.cache_v[batch_exec, : start_pos + seqlen]
+        cache_mask = self.cache_mask[batch_exec, : start_pos + seqlen]
 
         # repeat k/v heads if n_kv_heads < n_heads
         keys = repeat_kv(keys, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
@@ -338,8 +337,8 @@ class Attention(nn.Module):
             scores = scores + mask  # (bs, n_local_heads, seqlen, cache_len + seqlen)
         scores = F.softmax(scores.float(), dim=-1)
 
-        scores *= cache_mask
-        scores /= (scores.sum(-1, keepdim=True) + 1e-6)
+        scores = scores * cache_mask[:, None, None, :]
+        scores = scores / (scores.sum(-1, keepdim=True) + 1e-6)
         scores = scores.type_as(xq)
 
         output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen, head_dim)
@@ -426,9 +425,10 @@ class TransformerBlock(nn.Module):
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
-        if self.layer_id >= args.dynamic_start_layer:
-            self.router = RouterModule(args.dim, args.router_hdim, args.reserve_initials, args.norm_eps)
-            self.reserve_initials = args.reserve_initials
+        self.dynamic_start_layer = args.dynamic_start_layer
+        if self.layer_id >= self.dynamic_start_layer:
+            self.router = RouterModule(args.dim, args.dynamic_router_hdim, args.norm_eps)
+            self.reserve_initials = args.dynamic_reserve_initials
 
     def forward(
         self,
@@ -454,7 +454,9 @@ class TransformerBlock(nn.Module):
 
         if self.layer_id < self.dynamic_start_layer:
             w = torch.ones((bsz, seqlen, 1)).type_as(x)
-            h = x + self.attention(self.attention_norm(x), w, start_pos, freqs_cis, mask)
+            batch_exec = torch.arange(0, bsz).tolist()
+
+            h = x + self.attention(self.attention_norm(x), w, batch_exec, start_pos, freqs_cis, mask)
             out = h + self.feed_forward(self.ffn_norm(h))
             
             return out, w
@@ -466,18 +468,22 @@ class TransformerBlock(nn.Module):
                 w[:, :self.reserve_initials - start_pos, :] = 1
 
             if seqlen > 1:
-                h = x + self.attention(self.attention_norm(x), w, start_pos, freqs_cis, mask)
+                batch_exec = torch.arange(0, bsz).tolist()
+
+                h = x + self.attention(self.attention_norm(x), w, batch_exec, start_pos, freqs_cis, mask)
                 out = h + self.feed_forward(self.ffn_norm(h))
 
                 return out * w + x * (1 - w), w
             else:
-                idx_exec = torch.nonzero(w.squeeze()).squeeze(-1)
+                batch_exec = torch.nonzero(w.squeeze()).squeeze(-1).tolist()
 
                 if w.any():
-                    x_exec = x[idx_exec]
-                    h = x_exec + self.attention(self.attention_norm(x_exec), w, start_pos, freqs_cis, mask)
+                    x_exec = x[batch_exec]
+                    w_exec = w[batch_exec]
+
+                    h = x_exec + self.attention(self.attention_norm(x_exec), w_exec, batch_exec, start_pos, freqs_cis, mask)
                     out = h + self.feed_forward(self.ffn_norm(h))
-                    x[idx_exec] = out
+                    x[batch_exec] = out
 
                 return x, w
 

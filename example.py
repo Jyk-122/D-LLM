@@ -6,7 +6,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, List
 
 import fire
 import torch
@@ -44,9 +44,10 @@ instructs_examples = [
 
 
 def main(
-    ckpt_dir: str,
+    llama_ckpt_dir: str,
+    dynamic_ckpt_dir: str,
+    model_args_path: str,
     tokenizer_path: str,
-    adapter_path: str,
     temperature: float = 0.1,
     top_p: float = 0.75,
     max_seq_len: int = 512,
@@ -54,16 +55,16 @@ def main(
     instructs: List[str] = instructs_examples,
 ):
     generator = Llama.build_and_merge(
-        llama_ckpt_dir: str,
-        dynamic_ckpt_dir: str,
-        model_args_path: str,
-        tokenizer_path: str,
-        max_seq_len: int,
-        max_batch_size: int,
+        llama_ckpt_dir=llama_ckpt_dir,
+        dynamic_ckpt_dir=dynamic_ckpt_dir,
+        model_args_path=model_args_path,
+        tokenizer_path=tokenizer_path,
+        max_seq_len=max_seq_len,
+        max_batch_size=max_batch_size,
     )
 
-    prompts = prompts[:max_batch_size]
     prompts = [PROMPT_DICT["prompt_no_input"].format_map({"instruction": x, "input": ""}) for x in instructs]
+    prompts = prompts[:max_batch_size]
 
     results = generator.text_completion(prompts, max_gen_len=max_seq_len, temperature=temperature, top_p=top_p)
 
