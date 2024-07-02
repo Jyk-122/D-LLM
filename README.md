@@ -27,7 +27,7 @@ Datasets used in our work are all public and available on [Huggingface](https://
         ├─test.json
         └─prompt.json
 ```
-Here we provide two instruction datasets as templates for reference: Alpaca and PIQA. 
+Here we provide two instruction datasets as templates for reference: [Alpaca](https://huggingface.co/datasets/yahma/alpaca-cleaned) and [PIQA](https://huggingface.co/datasets/ybisk/piqa). 
 
 
 ## Training
@@ -52,16 +52,15 @@ To inference based on trained D-LLMs, we provide a chat completion program as a 
 export CUDA_VISIBLE_DEVICE=0
 
 torchrun --nproc_per_node 1 --master_port 9001 ./example.py \
-    --llama_ckpt_dir `/path/to/llama_ckpt` \
-    --dynamic_ckpt_dir `/path/to/dllm_ckpt` \
-    --model_args_path `/path/to/dllm_params` \
-    --tokenizer_path `/path/to/llama_tokenizer` \
+    --llama_ckpt_dir /path/to/llama_ckpt \
+    --dynamic_ckpt_dir /path/to/dllm_ckpt \
+    --model_args_path /path/to/dllm_params \
+    --tokenizer_path /path/to/llama_tokenizer \
     --instructs "['Tell me about the music in 1980s.', 'What is new wave?']"
 ```
 
-You can list your questions as string list in parameter `instructs`. The program outputs answers for default instructions if you don't use `instructs`.
+You can list your questions as string list in parameter `instructs`. The program outputs answers for default instructions set in `example.py` if you don't use `instructs`.
 
->📋  Describe how to evaluate the trained models on benchmarks reported in the paper, give commands that produce the results (section below).
 
 ## Pre-trained Models
 
