@@ -27,7 +27,7 @@ Datasets used in our work are all public and available on [Huggingface](https://
         ├─test.json
         └─prompt.json
 ```
-Here we provide two instruction datasets as templates for reference: [Alpaca](https://huggingface.co/datasets/yahma/alpaca-cleaned) and [PIQA](https://huggingface.co/datasets/ybisk/piqa). 
+Here we provide two instruction datasets as templates for reference: [Alpaca](https://huggingface.co/datasets/yahma/alpaca-cleaned) and [PIQA](https://huggingface.co/datasets/ybisk/piqa). In repository we provide datas as the demonstration with `test.json` for JSON format and `prompt.json` for prompt.
 
 
 ## Training

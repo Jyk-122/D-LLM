@@ -42,6 +42,35 @@ def load_alpaca(dataset_path, prompt_dict, max_words, tokenizer):
     return examples, labels, example_masks, label_masks, prompts, outputs
 
 
+def load_piqa(dataset_path, prompt_dict, max_words, tokenizer):
+    examples = []
+    labels = []
+    example_masks = []
+    label_masks = []
+    prompts = []
+    outputs = []
+
+    with open(dataset_path, 'r') as f:
+        datas = json.load(f)
+    
+    for data in tqdm(datas):
+        prompt = prompt_dict["prompt"].format_map(data)
+        output = str(data["answer"])
+        
+        example = prompt + output
+
+        example, label, example_mask, label_mask = tokenize(example, prompt, max_words, tokenizer)
+
+        examples.append(example)
+        labels.append(label)
+        example_masks.append(example_mask)
+        label_masks.append(label_mask)
+        prompts.append(prompt)
+        outputs.append(output)
+
+    return examples, labels, example_masks, label_masks, prompts, outputs
+
+
 def tokenize(example, prompt, max_words, tokenizer):
     example = torch.tensor(tokenizer.encode(example, bos=True, eos=True), dtype=torch.int64)
     prompt = torch.tensor(tokenizer.encode(prompt, bos=True, eos=False), dtype=torch.int64)
@@ -61,7 +90,8 @@ def tokenize(example, prompt, max_words, tokenizer):
 
 
 dataset_handlers = {
-    "alpaca": load_alpaca,
+    "alpaca":   load_alpaca,
+    "piqa":     load_piqa
 }
 
 
