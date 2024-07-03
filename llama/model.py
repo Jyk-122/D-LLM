@@ -186,12 +186,36 @@ class RouterModule(nn.Module):
         hidden_dim: int,
         norm_eps: float
     ) -> torch.Tensor:
+        """
+        Initialize the Router module.
+
+        Args:
+            in_dim (int): Dim of input feature.
+            hidden_dim (int): Dim of hidden layer.
+            norm_eps (float): Eps for RMSNorm.
+
+        Attributes:
+            linear_1 (Linear): Linear transformation 1 for router.
+            norm (RMSNorm): Layer normalization for the model output.
+            linear_2 (Linear): Linear transformation 2 for router.
+
+        """
         super().__init__()
         self.linear_1 = nn.Linear(in_dim, hidden_dim)
         self.norm = RMSNorm(hidden_dim, norm_eps)
         self.linear_2 = nn.Linear(hidden_dim, 2)
 
     def forward(self, x):
+        """
+        Forward pass of the router module.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            x (torch.Tensor): Output router tensor. Last dim is 2, [0, 1] or [1, 0].
+
+        """
         x = self.linear_2(F.silu(self.norm(self.linear_1(x.float()))))        
         x = F.softmax(x, dim=-1)
         x = torch.where(x < 0.5, 0, 1)
@@ -220,6 +244,7 @@ class Attention(nn.Module):
             wo (RowParallelLinear): Linear transformation for output.
             cache_k (torch.Tensor): Cached keys for attention.
             cache_v (torch.Tensor): Cached values for attention.
+            cache_mask (torch.Tensor): Mask for cache. Cache is unusable with label 0. Necessary for parallel inference on D-LLM.
 
         """
         super().__init__()
@@ -296,6 +321,8 @@ class Attention(nn.Module):
 
         Args:
             x (torch.Tensor): Input tensor.
+            router (torch.Tensor): Input routes tensor.
+            batch_exec (List[int]): Identification for the index of sample in a batch to be executed.
             start_pos (int): Starting position for caching.
             freqs_cis (torch.Tensor): Precomputed frequency tensor.
             mask (torch.Tensor, optional): Attention mask tensor.
@@ -337,6 +364,7 @@ class Attention(nn.Module):
             scores = scores + mask  # (bs, n_local_heads, seqlen, cache_len + seqlen)
         scores = F.softmax(scores.float(), dim=-1)
 
+        # remove unusable kv_cache
         scores = scores * cache_mask[:, None, None, :]
         scores = scores / (scores.sum(-1, keepdim=True) + 1e-6)
         scores = scores.type_as(xq)
@@ -408,6 +436,9 @@ class TransformerBlock(nn.Module):
             layer_id (int): Identifier for the layer.
             attention_norm (RMSNorm): Layer normalization for attention output.
             ffn_norm (RMSNorm): Layer normalization for feedforward output.
+            dynamic_start_layer (int): Indicate the layer start to apply router module.
+            router (Optional[RouterModule]): Router module.
+            reserve_initials (int): Number of tokens at the beginning of sentences reserved as executed.
 
         """
         super().__init__()
@@ -447,7 +478,8 @@ class TransformerBlock(nn.Module):
             mask (torch.Tensor, optional): Masking tensor for attention. Defaults to None.
 
         Returns:
-            torch.Tensor: Output tensor after applying attention and feedforward layers.
+            x (torch.Tensor): Output tensor after applying attention and feedforward layers.
+            w (torch.Tensor): Output routes tensor after applying router module.
 
         """
         bsz, seqlen, _ = x.shape
@@ -542,7 +574,8 @@ class Transformer(nn.Module):
             start_pos (int): Starting position for attention caching.
 
         Returns:
-            torch.Tensor: Output logits after applying the Transformer model.
+            output (torch.Tensor): Output logits after applying the D-LLM.
+            activation (torch.Tensor): Output routes tensor after applying the D-LLM. 
 
         """
         _bsz, seqlen = tokens.shape

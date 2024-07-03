@@ -27,7 +27,7 @@ Datasets used in our work are all public and available on [Huggingface](https://
         ├─test.json
         └─prompt.json
 ```
-Here we provide two instruction datasets as templates for reference: [Alpaca](https://huggingface.co/datasets/yahma/alpaca-cleaned) and [PIQA](https://huggingface.co/datasets/ybisk/piqa). In repository we provide datas as the demonstration with `test.json` for JSON format and `prompt.json` for prompt.
+Here we provide two instruction datasets currently as templates for reference: [Alpaca](https://huggingface.co/datasets/yahma/alpaca-cleaned) and [PIQA](https://huggingface.co/datasets/ybisk/piqa). In repository we provide datas as the demonstration with `test.json` for JSON format and `prompt.json` for prompt.
 
 
 ## Training
@@ -46,7 +46,7 @@ bash finetuning.sh
 
 ## Inference
 
-To inference based on trained D-LLMs, we provide a chat completion program as a demo. Run the following command to ask D-LLM on your own inputs, for example:
+To inference based on trained D-LLMs, we provide a chat completion program as a demo. The instruction is organized in the prompt format of Alpaca in `example.py`. Run the following command to ask D-LLM on your own inputs, for example:
 
 ```inference
 export CUDA_VISIBLE_DEVICE=0
@@ -59,7 +59,7 @@ torchrun --nproc_per_node 1 --master_port 9001 ./example.py \
     --instructs "['Tell me about the music in 1980s.', 'What is new wave?']"
 ```
 
-You can list your questions as string list in parameter `instructs`. The program outputs answers for default instructions set in `example.py` if you don't use `instructs`.
+You can list your questions as string list in parameter `instructs`. The program outputs answers for default instructions if you don't use parameter `instructs`.
 
 
 ## Pre-trained Models

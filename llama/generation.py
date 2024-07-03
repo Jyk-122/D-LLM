@@ -65,7 +65,9 @@ class Llama:
         Build a Llama instance by initializing and loading a pre-trained model.
 
         Args:
-            ckpt_dir (str): Path to the directory containing checkpoint files.
+            llama_ckpt_dir (str): Path to the directory containing Llama checkpoint files.
+            dynamic_ckpt_dir (str): Path to the directory containing D-LLM checkpoint files, including weights for RouteModule and LoRA.
+            model_args_path (str): Path to the params of D-LLM.
             tokenizer_path (str): Path to the tokenizer file.
             max_seq_len (int): Maximum sequence length for input text.
             max_batch_size (int): Maximum batch size for inference.
@@ -167,7 +169,7 @@ class Llama:
         temperature: float = 0.6,
         top_p: float = 0.9,
         logprobs: bool = False,
-        logacts: bool = True,
+        actprobs: bool = True,
         echo: bool = False,
     ) -> Tuple[List[List[int]], Optional[List[List[float]]]]:
         """
@@ -179,14 +181,18 @@ class Llama:
             temperature (float, optional): Temperature value for controlling randomness in sampling. Defaults to 0.6.
             top_p (float, optional): Top-p probability threshold for nucleus sampling. Defaults to 0.9.
             logprobs (bool, optional): Flag indicating whether to compute token log probabilities. Defaults to False.
+            actprobs (bool, optional): Flag indicating whether to compute token activation probabilities. Defaults to True.
             echo (bool, optional): Flag indicating whether to include prompt tokens in the generated output. Defaults to False.
 
         Returns:
-            Tuple[List[List[int]], Optional[List[List[float]]]]: A tuple containing generated token sequences and, if logprobs is True, corresponding token log probabilities.
+            Tuple[List[List[int]], Optional[List[List[float]]], Optional[List[List[float]]]]: 
+                A tuple containing generated token sequences and, if logprobs is True, corresponding token log probabilities; if actprobs is True, corresponding token activation probabilities.
 
         Note:
             This method uses the provided prompts as a basis for generating text. It employs nucleus sampling to produce text with controlled randomness.
             If logprobs is True, token log probabilities are computed for each generated token.
+            If actprobs is True, token act probabilities are computed for each generated token.
+
 
         """
         params = self.model.params
@@ -204,8 +210,8 @@ class Llama:
             tokens[k, : len(t)] = torch.tensor(t, dtype=torch.long, device="cuda")
         if logprobs:
             token_logprobs = torch.zeros_like(tokens, dtype=torch.float)
-        if logacts:
-            token_logacts = torch.zeros_like(tokens, dtype=torch.float)
+        if actprobs:
+            token_actprobs = torch.zeros_like(tokens, dtype=torch.float)
 
         prev_pos = 0
         eos_reached = torch.tensor([False] * bsz, device="cuda")
@@ -218,7 +224,7 @@ class Llama:
                 reduction="none",
                 ignore_index=pad_id,
             )
-            token_logacts = activation.mean(dim=-1)
+            token_actprobs = activation.mean(dim=-1)
 
         for cur_pos in range(min_prompt_len, total_len):
             logits, activation = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
@@ -241,8 +247,8 @@ class Llama:
                     reduction="none",
                     ignore_index=pad_id,
                 )
-            if logacts:
-                token_logacts[:, prev_pos : cur_pos] = activation.mean(dim=-1)
+            if actprobs:
+                token_actprobs[:, prev_pos : cur_pos] = activation.mean(dim=-1)
             eos_reached |= (~input_text_mask[:, cur_pos]) & (
                 next_token == self.tokenizer.eos_id
             )
@@ -252,9 +258,9 @@ class Llama:
 
         if logprobs:
             token_logprobs = token_logprobs.tolist()
-        if logacts:
-            token_logacts = token_logacts.tolist()
-        out_tokens, out_logprobs, out_logacts = [], [], []
+        if actprobs:
+            token_actprobs = token_actprobs.tolist()
+        out_tokens, out_logprobs, out_actprobs = [], [], []
         for i, toks in enumerate(tokens.tolist()):
             # cut to max gen len
             start = 0 if echo else len(prompt_tokens[i])
@@ -262,18 +268,18 @@ class Llama:
             probs, acts = None, None
             if logprobs:
                 probs = token_logprobs[i][start : len(prompt_tokens[i]) + max_gen_len]
-            if logacts:
-                acts = token_logacts[i][start : len(prompt_tokens[i]) + max_gen_len]
+            if actprobs:
+                acts = token_actprobs[i][start : len(prompt_tokens[i]) + max_gen_len]
             # cut to eos tok if any
             if self.tokenizer.eos_id in toks:
                 eos_idx = toks.index(self.tokenizer.eos_id)
                 toks = toks[:eos_idx]
                 probs = probs[:eos_idx] if logprobs else None
-                acts = acts[:eos_idx] if logacts else None
+                acts = acts[:eos_idx] if actprobs else None
             out_tokens.append(toks)
             out_logprobs.append(probs)
-            out_logacts.append(acts)
-        return (out_tokens, out_logprobs if logprobs else None, out_logacts if logacts else None)
+            out_actprobs.append(acts)
+        return (out_tokens, out_logprobs if logprobs else None, out_actprobs if actprobs else None)
 
     def text_completion(
         self,
@@ -282,7 +288,7 @@ class Llama:
         top_p: float = 0.9,
         max_gen_len: Optional[int] = None,
         logprobs: bool = False,
-        logacts: bool = True,
+        actprobs: bool = True,
         echo: bool = False,
     ) -> List[CompletionPrediction]:
         """
@@ -295,6 +301,7 @@ class Llama:
             max_gen_len (Optional[int], optional): Maximum length of the generated completion sequence.
                 If not provided, it's set to the model's maximum sequence length minus 1.
             logprobs (bool, optional): Flag indicating whether to compute token log probabilities. Defaults to False.
+            actprobs (bool, optional): Flag indicating whether to compute token act probabilities. Defaults to True.
             echo (bool, optional): Flag indicating whether to include prompt tokens in the generated output. Defaults to False.
 
         Returns:
@@ -303,18 +310,19 @@ class Llama:
         Note:
             This method generates text completions for the provided prompts, employing nucleus sampling to introduce controlled randomness.
             If logprobs is True, token log probabilities are computed for each generated token.
+            If actprobs is True, token act probabilities are computed for each generated token.
 
         """
         if max_gen_len is None:
             max_gen_len = self.model.params.max_seq_len - 1
         prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=False) for x in prompts]
-        generation_tokens, generation_logprobs, generation_logacts = self.generate(
+        generation_tokens, generation_logprobs, generation_actprobs = self.generate(
             prompt_tokens=prompt_tokens,
             max_gen_len=max_gen_len,
             temperature=temperature,
             top_p=top_p,
             logprobs=logprobs,
-            logacts=logacts,
+            actprobs=actprobs,
             echo=echo,
         )
 
@@ -323,7 +331,7 @@ class Llama:
                 "generation": self.tokenizer.decode(generation_tokens[i]),
                 "tokens": [self.tokenizer.decode(x) for x in generation_tokens[i]],
                 "logprobs": generation_logprobs[i] if logprobs else None,
-                "logacts": generation_logacts[i] if logacts else None
+                "actprobs": generation_actprobs[i] if actprobs else None
             }
             for i in range(len(generation_tokens))
         ]
@@ -335,7 +343,7 @@ class Llama:
         top_p: float = 0.9,
         max_gen_len: Optional[int] = None,
         logprobs: bool = False,
-        logacts: bool = True,
+        actprobs: bool = True,
     ) -> List[ChatPrediction]:
         """
         Generate assistant responses for a list of conversational dialogs using the language generation model.
@@ -347,6 +355,7 @@ class Llama:
             max_gen_len (Optional[int], optional): Maximum length of the generated response sequence.
                 If not provided, it's set to the model's maximum sequence length minus 1.
             logprobs (bool, optional): Flag indicating whether to compute token log probabilities. Defaults to False.
+            actprobs (bool, optional): Flag indicating whether to compute token act probabilities. Defaults to True.
 
         Returns:
             List[ChatPrediction]: List of chat predictions, each containing the assistant's generated response.
@@ -359,6 +368,7 @@ class Llama:
             This method generates assistant responses for the provided conversational dialogs.
             It employs nucleus sampling to introduce controlled randomness in text generation.
             If logprobs is True, token log probabilities are computed for each generated token.
+            If actprobs is True, token act probabilities are computed for each generated token.
 
         """
         if max_gen_len is None:
@@ -409,13 +419,13 @@ class Llama:
             )
             prompt_tokens.append(dialog_tokens)
 
-        generation_tokens, generation_logprobs, generation_logacts = self.generate(
+        generation_tokens, generation_logprobs, generation_actprobs = self.generate(
             prompt_tokens=prompt_tokens,
             max_gen_len=max_gen_len,
             temperature=temperature,
             top_p=top_p,
             logprobs=logprobs,
-            logacts=logacts,
+            actprobs=actprobs,
         )
 
         return [
@@ -426,7 +436,7 @@ class Llama:
                 },
                 "tokens": [self.tokenizer.decode(x) for x in generation_tokens[i]],
                 "logprobs": generation_logprobs[i] if logprobs else None,
-                "logacts": generation_logacts[i] if logacts else None,
+                "actprobs": generation_actprobs[i] if actprobs else None,
             }
             for i in range(len(generation_tokens))
         ]

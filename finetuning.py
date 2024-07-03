@@ -24,26 +24,26 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
 def get_args_parser():
     parser = argparse.ArgumentParser("D-LLM finetuing", add_help=False)
-    parser.add_argument("--batch_size", default=1, type=int, help="Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus")
-    parser.add_argument("--epochs", default=10, type=int)
-    parser.add_argument("--start_epoch", default=0, type=int, metavar="N", help="start epoch")
-    parser.add_argument("--accum_iter", default=1, type=int, help="Accumulate gradient iterations (for increasing the effective batch size under memory constraints)")
-    parser.add_argument("--print_freq", default=10, type=int, help="")
-    parser.add_argument("--save_freq", default=1, type=int, help="")
+    parser.add_argument("--batch_size", default=1, type=int, help="batch size per GPU (effective batch size is batch_size * accum_iter * # gpus")
+    parser.add_argument("--epochs", default=10, type=int, help="epochs for training.")
+    parser.add_argument("--start_epoch", default=0, type=int, help="start epoch")
+    parser.add_argument("--accum_iter", default=1, type=int, help="accumulate gradient iterations (for increasing the effective batch size under memory constraints)")
+    parser.add_argument("--print_freq", default=10, type=int, help="frequency of iterations to print logging infos")
+    parser.add_argument("--save_freq", default=1, type=int, help="frequency of epochs to save checkpoints")
 
     # Model parameters
-    parser.add_argument("--llama_model_path", default="./llama", type=str, help="path of llama model")
-    parser.add_argument("--llama_param_path", default="./llama", type=str, help="path of llama model")
+    parser.add_argument("--llama_model_path", default="./llama", type=str, help="path of llama model checkpoints")
+    parser.add_argument("--llama_param_path", default="./llama/params.json", type=str, help="path of llama model parameters")
     parser.add_argument("--tokenizer_path", default="./tokenizer.model", type=str, help="path of tokenizer model")
-    parser.add_argument("--model_save_name", type=str, default="Llama_dynamic", help="")
+    parser.add_argument("--model_save_name", type=str, default="Llama_dynamic", help="folder name to save your models")
     
-    parser.add_argument("--max_seq_len", type=int, default=512, metavar="LENGTH", help="the maximum sequence length")
-    parser.add_argument("--lora_rank", type=int, default=8, help="")
-    parser.add_argument("--dynamic_active_target", type=float, default=0.5, help="")
-    parser.add_argument("--dynamic_router_hdim", type=int, default=512, help="")
-    parser.add_argument("--dynamic_start_layer", type=int, default=8, help="")
-    parser.add_argument("--dynamic_reserve_initials", type=int, default=2, help="")
-    parser.add_argument("--lambda_active", type=float, default=1.0, help="")
+    parser.add_argument("--max_seq_len", type=int, default=512, help="the maximum sequence length")
+    parser.add_argument("--lora_rank", type=int, default=8, help="the rank of lora module")
+    parser.add_argument("--dynamic_active_target", type=float, default=0.5, help="the expect target ratio of D-LLM")
+    parser.add_argument("--dynamic_router_hdim", type=int, default=512, help="the hidden dim of router in D-LLM")
+    parser.add_argument("--dynamic_start_layer", type=int, default=8, help="the start layer in transformer to apply router module")
+    parser.add_argument("--dynamic_reserve_initials", type=int, default=2, help="the number of tokens at the beginning of sentences reserved as executed")
+    parser.add_argument("--lambda_active", type=float, default=1.0, help="the coefficient of active loss")
 
     # Optimizer parameters
     parser.add_argument("--weight_decay", type=float, default=0.05, help="weight decay (default: 0.05)")
@@ -54,7 +54,7 @@ def get_args_parser():
 
     # Dataset parameters
     parser.add_argument("--dataset_path", default="./dataset", type=str, help="dataset path")
-    parser.add_argument("--dataset_name", default="alpaca", type=str, help="dataset path")
+    parser.add_argument("--dataset_name", default="alpaca", type=str, help="dataset name")
     parser.add_argument("--output_dir", default="./output", help="path where to save, empty for no saving")
     parser.add_argument("--device", default="cuda", help="device to use for training / testing")
     parser.add_argument("--seed", default=0, type=int)

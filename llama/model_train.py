@@ -176,12 +176,31 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 class ActiveLoss(nn.Module):
     def __init__(self, target, reserve_initials):
+        """
+        Initialize the ActiveLoss module to calculate about routes.
+
+        Args & Attributes:
+            target (float): Target execution ratio expecting the D-LLM to behave.
+            reserve_initials (int): Number of tokens at the beginning of sentences reserved as executed.
+
+        """
         super().__init__()
         self.target = target
         self.reserve_initials = reserve_initials
 
     @torch.no_grad()
     def metric(self, activation: torch.Tensor, mask: torch.Tensor):
+        """
+        Provide metrics on activations. Used for logging.
+
+        Args:
+            activation (torch.Tensor): Input routes tensor.
+            mask (torch.Tensor): Mask tensor to indicate unconsidered routes.
+
+        Returns:
+            metrics (Dict): Metrics on activations.
+
+        """
         activation = activation[:, self.reserve_initials:, :]
         mask = mask[:, self.reserve_initials:]
 
@@ -201,6 +220,17 @@ class ActiveLoss(nn.Module):
 
 
     def forward(self, activation: torch.Tensor, mask: torch.Tensor):
+        """
+        Forward pass of the ActiveLoss module.
+
+        Args:
+            activation (torch.Tensor): Input routes tensor.
+            mask (torch.Tensor): Mask tensor to indicate unconsidered routes.
+
+        Returns:
+            loss (torch.Tensor): Loss between actual ratio of activations and the target ratio.
+
+        """
         activation = activation[:, self.reserve_initials:, :]
         mask = mask[:, self.reserve_initials:]
 
@@ -215,6 +245,20 @@ class ActiveLoss(nn.Module):
 
 class LoRAModule(nn.Module):
     def __init__(self, in_dim : int, rank : int, out_dim : int):
+        """
+        Initialize the LoRA module.
+
+        Args:
+            in_dim (int): Dim of input feature.
+            rank (int): Dim of hidden layer.
+            out_dim (int): Dim of output tensor.
+
+        Attributes:
+            linear_A (Linear): Linear transformation A for rank reduction.
+            linear_B (Linear): Linear transformation B for rank up.
+            dropout (nn.Dropout): Droupout layer.
+
+        """
         super().__init__()
         self.linear_A = nn.Linear(in_dim, rank, bias=False)
         self.linear_B = nn.Linear(rank, out_dim, bias=False)
@@ -236,6 +280,22 @@ class RouterModule(nn.Module):
         reserve_initials: int,
         norm_eps: float
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """
+        Initialize the Router module.
+
+        Args:
+            in_dim (int): Dim of input feature.
+            hidden_dim (int): Dim of hidden layer.
+            reserve_initials (int): Number of tokens at the beginning of sentences reserved as executed.
+            norm_eps (float): Eps for RMSNorm.
+
+        Attributes:
+            linear_1 (Linear): Linear transformation 1 for router.
+            norm (RMSNorm): Layer normalization for the model output.
+            linear_2 (Linear): Linear transformation 2 for router.
+            reserve_initials (int): Number of tokens at the beginning of sentences reserved as executed.
+
+        """
         super().__init__()
         self.linear_1 = nn.Linear(in_dim, hidden_dim)
         self.norm = RMSNorm(hidden_dim, norm_eps)
@@ -247,6 +307,17 @@ class RouterModule(nn.Module):
         self.reserve_initials = reserve_initials
 
     def forward(self, x):
+        """
+        Forward pass of the router module.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            x (torch.Tensor): Output router tensor. Last dim is 2, [0, 1] or [1, 0].
+            eviction_mask (torch.Tensor): Output eviction mask for kv_cache, calculated from routes and will be applied on attention.
+
+        """
         bsz, seqlen, _ = x.shape
 
         x = self.linear_2(F.silu(self.norm(self.linear_1(x.float()))))
@@ -283,12 +354,10 @@ class Attention(nn.Module):
             n_local_kv_heads (int): Number of local key and value heads.
             n_rep (int): Number of repetitions for local heads.
             head_dim (int): Dimension size of each attention head.
-            wq (ColumnParallelLinear): Linear transformation for queries.
-            wk (ColumnParallelLinear): Linear transformation for keys.
-            wv (ColumnParallelLinear): Linear transformation for values.
-            wo (RowParallelLinear): Linear transformation for output.
-            cache_k (torch.Tensor): Cached keys for attention.
-            cache_v (torch.Tensor): Cached values for attention.
+            wq (Linear): Linear transformation for queries.
+            wk (Linear): Linear transformation for keys.
+            wv (Linear): Linear transformation for values.
+            wo (Linear): Linear transformation for output.
 
         """
         super().__init__()
@@ -322,7 +391,8 @@ class Attention(nn.Module):
             x (torch.Tensor): Input tensor.
             start_pos (int): Starting position for caching.
             freqs_cis (torch.Tensor): Precomputed frequency tensor.
-            mask (torch.Tensor, optional): Attention mask tensor.
+            causal mask (torch.Tensor, optional): Attention causal mask tensor.
+            eviction mask (torch.Tensor, optional): Attention eviction mask tensor.
 
         Returns:
             torch.Tensor: Output tensor after attention.
@@ -383,9 +453,9 @@ class FeedForward(nn.Module):
             ffn_dim_multiplier (float, optional): Custom multiplier for hidden dimension. Defaults to None.
 
         Attributes:
-            w1 (ColumnParallelLinear): Linear transformation for the first layer.
-            w2 (RowParallelLinear): Linear transformation for the second layer.
-            w3 (ColumnParallelLinear): Linear transformation for the third layer.
+            w1 (Linear): Linear transformation for the first layer.
+            w2 (Linear): Linear transformation for the second layer.
+            w3 (Linear): Linear transformation for the third layer.
 
         """
         super().__init__()
@@ -421,6 +491,9 @@ class TransformerBlock(nn.Module):
             layer_id (int): Identifier for the layer.
             attention_norm (RMSNorm): Layer normalization for attention output.
             ffn_norm (RMSNorm): Layer normalization for feedforward output.
+            dynamic_start_layer (int): Indicate the layer start to apply router module.
+            router (Optional[RouterModule]): Router module.
+
 
         """
         super().__init__()
@@ -456,10 +529,11 @@ class TransformerBlock(nn.Module):
             x (torch.Tensor): Input tensor.
             start_pos (int): Starting position for attention caching.
             freqs_cis (torch.Tensor): Precomputed cosine and sine frequencies.
-            mask (torch.Tensor, optional): Masking tensor for attention. Defaults to None.
+            mask (torch.Tensor, optional): Causal masking tensor for attention. Defaults to None.
 
         Returns:
             torch.Tensor: Output tensor after applying attention and feedforward layers.
+            w (torch.Tensor): Output routes after applying router module.
 
         """
         bsz, seqlen, _ = x.shape
@@ -494,9 +568,11 @@ class Transformer(nn.Module):
             vocab_size (int): Vocabulary size.
             n_layers (int): Number of layers in the model.
             tok_embeddings (ParallelEmbedding): Token embeddings.
+            criterion (torch.nn.CrossEntropyLoss): CrossEntropy function.
+            criterion_active (ActiveLoss): Active ratio function.
             layers (torch.nn.ModuleList): List of Transformer blocks.
             norm (RMSNorm): Layer normalization for the model output.
-            output (ColumnParallelLinear): Linear layer for final output.
+            output (Linear): Linear layer for final output.
             freqs_cis (torch.Tensor): Precomputed cosine and sine frequencies.
 
         """
@@ -538,13 +614,15 @@ class Transformer(nn.Module):
         Perform a forward pass through the Transformer model.
 
         Args:
-            examples (torch.Tensor): Input token indices.
-            examples (torch.Tensor): Input token indices.
-            examples (torch.Tensor): Input token indices.
-            examples (torch.Tensor): Input token indices.
+            examples (torch.Tensor): Input token indices representing whole sentences.
+            labels (torch.Tensor): Input token indices representing labels.
+            example_masks (torch.Tensor): Mask corresponding to sentences.
+            label_masks (torch.Tensor): Mask corresponding to labels.
 
         Returns:
-            torch.Tensor: Output logits after applying the Transformer model.
+            c_loss (torch.Tensor): Output CE after applying the D-LLM.
+            a_loss (torch.Tensor): Output active loss after applying the D-LLM.
+            active_metric (Dict): Output metrics about activations after applying the D-LLM.
 
         """
         _bsz, seqlen = examples.shape
