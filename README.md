@@ -72,13 +72,25 @@ You can download pretrained models here:
 
 ## Results
 
-Our model achieves the following performance on :
+We compare D-LLM with other block-wise pruning methods, including MoD, Shorten-Llama, Ada-Infer. We set the target of pruning ratio as 50% for training. D-LLM achieves siginificant improvements on following instruction finetuning benchmarks with bold numbers indicating the best performance:
 
-| Model name         | Top 1 Accuracy  | Top 5 Accuracy |
-| ------------------ |---------------- | -------------- |
-| My awesome model   |     85%         |      95%       |
+| | | | | | | | | | | |
+|-|-|-|-|-|-|-|-|-|-|-|
+|Dataset|MoD| |Shorten-Llama(PPL)| |Shorten-Llama(Taylor)| |Ada-Infer| |D-LLM| |
+|Q&A|PPL|FLOPs|PPL|FLOPs|PPL|FLOPs|PPL|FLOPs|PPL|FLOPs|
+|Alpaca|10.32|0.56|7.09|0.66|7.65|0.66|319|0.65|6.01|0.59|
+|SAMSum|4.47|0.56|4.39|0.66|4.66|0.66|874|0.56|3.18|0.55|
+|Math|Acc|FLOPs|Acc|FLOPs|Acc|FLOPs|Acc|FLOPs|Acc|FLOPs|
+|GSM8K|0.08|0.56|0.1|0.66|0.18|0.66|0.00|0.83|0.29|0.59|
+|MaWPS|0.33|0.56|0.52|0.66|0.39|0.66|0.00|0.9|0.74|0.56|
+|CommonSense|Acc|FLOPs|Acc|FLOPs|Acc|FLOPs|Acc|FLOPs|Acc|FLOPs|
+|BoolQ|0.64|0.56|0.67|0.66|0.73|0.66|0.71|0.61|0.73|0.52|
+|PIQA|0.49|0.56|0.76|0.66|0.83|0.66|0.55|0.63|0.84|0.52|
+|SIQA|0.58|0.56|0.75|0.66|0.81|0.66|0.80|0.64|0.82|0.54|
+|OBQA|0.42|0.56|0.63|0.66|0.81|0.66|0.78|0.76|0.80|0.53|
+|MMLU|0.28|0.56|0.47|0.66|0.53|0.66|0.41|0.6|0.53|0.55|
 
->📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. 
+Details are available in our paper.
 
 
 ## Contributing
