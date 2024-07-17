@@ -1,6 +1,6 @@
 # D-LLM(WIP)
 
-This repository is the official implementation of [D-LLM: A Token Adaptive Computing Resource Allocation Strategy for Large Language Models](https://arxiv.org/abs/2030.12345). 
+This repository is the official implementation of [D-LLM: A Token Adaptive Computing Resource Allocation Strategy for Large Language Models](https://arxiv.org/abs/2030.12345)(will be released soon). 
 
 The implementation of algorithm is conducted on LLM [Llama-2](https://github.com/Meta-Llama/llama?tab=readme-ov-file) currently.
 
@@ -61,14 +61,6 @@ torchrun --nproc_per_node 1 --master_port 9001 ./example.py \
 
 You can list your questions as string list in parameter `instructs`. The program outputs answers for default instructions if you don't use parameter `instructs`.
 
-
-## Pre-trained Models
-
-You can download pretrained models here:
-
-- [My awesome model](https://drive.google.com/mymodel.pth) trained on ImageNet using parameters x,y,z. 
-
->📋  Give a link to where/how the pretrained models can be downloaded and how they were trained (if applicable).  Alternatively you can have an additional column in your results table with a link to the models.
 
 ## Results
 
