@@ -304,7 +304,8 @@ class Attention(nn.Module):
             (
                 args.max_batch_size,
                 args.max_seq_len,
-            )
+            ),
+            dtype=torch.bool
         ).cuda()
 
     def forward(
@@ -346,7 +347,7 @@ class Attention(nn.Module):
 
         self.cache_k[batch_exec, start_pos : start_pos + seqlen] = xk
         self.cache_v[batch_exec, start_pos : start_pos + seqlen] = xv
-        self.cache_mask[batch_exec, start_pos : start_pos + seqlen] = router[:, :, 0]
+        self.cache_mask[batch_exec, start_pos : start_pos + seqlen] = router[:, :, 0].bool()
 
         keys = self.cache_k[batch_exec, : start_pos + seqlen]
         values = self.cache_v[batch_exec, : start_pos + seqlen]
@@ -362,12 +363,11 @@ class Attention(nn.Module):
         scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
         if mask is not None:
             scores = scores + mask  # (bs, n_local_heads, seqlen, cache_len + seqlen)
-        scores = F.softmax(scores.float(), dim=-1)
 
         # remove unusable kv_cache
-        scores = scores * cache_mask[:, None, None, :]
-        scores = scores / (scores.sum(-1, keepdim=True) + 1e-6)
-        scores = scores.type_as(xq)
+        cache_mask = torch.where(cache_mask, 0, float("-inf"))
+        scores = scores + cache_mask[:, None, None, :]
+        scores = F.softmax(scores.float(), dim=-1).type_as(xq)
 
         output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen, head_dim)
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)

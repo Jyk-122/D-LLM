@@ -202,9 +202,9 @@ def val_one_epoch(
     active_ratio_value_reduce /= cnt
 
     if log_writer is not None:
-        log_writer.add_scalar("Train/c_loss", c_loss_value_reduce, epoch)
-        log_writer.add_scalar("Train/a_loss", a_loss_value_reduce, epoch)
-        log_writer.add_scalar("Train/active_ratio", active_ratio_value_reduce, epoch)
+        log_writer.add_scalar("Eval/c_loss", c_loss_value_reduce, epoch)
+        log_writer.add_scalar("Eval/a_loss", a_loss_value_reduce, epoch)
+        log_writer.add_scalar("Eval/active_ratio", active_ratio_value_reduce, epoch)
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
