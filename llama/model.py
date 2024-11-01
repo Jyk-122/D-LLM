@@ -507,7 +507,7 @@ class TransformerBlock(nn.Module):
 
                 return out * w + x * (1 - w), w
             else:
-                batch_exec = torch.nonzero(w.squeeze()).squeeze(-1).tolist()
+                batch_exec = torch.nonzero(w.reshape(-1)).squeeze(-1).tolist()
 
                 if w.any():
                     x_exec = x[batch_exec]
