@@ -343,7 +343,7 @@ class Attention(nn.Module):
 
         self.cache_k = self.cache_k.to(xq)
         self.cache_v = self.cache_v.to(xq)
-        self.cache_mask = self.cache_mask.to(xq)
+        self.cache_mask = self.cache_mask.to(xq.device)
 
         self.cache_k[batch_exec, start_pos : start_pos + seqlen] = xk
         self.cache_v[batch_exec, start_pos : start_pos + seqlen] = xv
