@@ -1,6 +1,6 @@
 # D-LLM(WIP)
 
-This repository is the official implementation of [D-LLM: A Token Adaptive Computing Resource Allocation Strategy for Large Language Models](https://arxiv.org/abs/2030.12345) (will be released soon). 
+This repository is the official implementation of [D-LLM: A Token Adaptive Computing Resource Allocation Strategy for Large Language Models](https://openreview.net/pdf?id=UIOjGTKHQG). 
 
 The implementation of algorithm is conducted on [Llama-2](https://github.com/Meta-Llama/llama?tab=readme-ov-file) currently.
 
