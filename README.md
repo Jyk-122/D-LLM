@@ -1,6 +1,6 @@
-# D-LLM(WIP)
+# D-LLM
 
-This repository is the official implementation of [D-LLM: A Token Adaptive Computing Resource Allocation Strategy for Large Language Models](https://openreview.net/pdf?id=UIOjGTKHQG). 
+This repository is the official implementation of [D-LLM: A Token Adaptive Computing Resource Allocation Strategy for Large Language Models](https://papers.nips.cc/paper_files/paper/2024/hash/03469b1a66e351b18272be23baf3b809-Abstract-Conference.html). 
 
 The implementation of algorithm is conducted on [Llama-2](https://github.com/Meta-Llama/llama?tab=readme-ov-file) currently.
 
@@ -69,6 +69,15 @@ We compare D-LLM with other block-wise pruning methods, including MoD, Shortened
 ![result](./assets/result.png)
 
 
-## Contributing
+## Citation
 
->📋  Pick a licence and describe how to contribute to your code repository. 
+```
+@article{jiang2024d,
+  title={D-llm: A token adaptive computing resource allocation strategy for large language models},
+  author={Jiang, Yikun and Wang, Huanyu and Xie, Lei and Zhao, Hanbin and Qian, Hui and Lui, John and others},
+  journal={Advances in Neural Information Processing Systems},
+  volume={37},
+  pages={1725--1749},
+  year={2024}
+}
+```
